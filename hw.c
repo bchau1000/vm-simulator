@@ -10,6 +10,8 @@
 #define MAIN_PAGES 4
 #define VIRT_PAGES 8
 
+//comment by MK
+
 void getArgs(char *input[], char raw_input[]) {
     char *stripNewline = strchr(raw_input, '\n');
     if (stripNewline)
