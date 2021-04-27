@@ -10,9 +10,20 @@
 #define MAIN_PAGES 4
 #define VIRT_PAGES 8
 
-//comment by MK
-//comment by bchau
-void getArgs(char *input[], char raw_input[]) {
+// Page Replacement Algorithm = pr_algo
+// FIFO: pr_algo = true (default)
+// LRU: pr_algo = false
+bool pr_algo = true;
+
+// If the user chooses FIFO, store the first page wrriten to main memory here
+int FIFO[1] = {-1};
+
+/*
+    Tokenize raw_input[] and store in *input[]
+    input[0] stores the command itself
+    input[1...] will store the various arguments, if any
+*/
+void parseInput(char *input[], char raw_input[]) {
     char *stripNewline = strchr(raw_input, '\n');
     if (stripNewline)
         *stripNewline = 0;
@@ -24,6 +35,36 @@ void getArgs(char *input[], char raw_input[]) {
         *inputPtr++ = token;
         token = strtok(NULL, " ");
     }
+}
+
+/*
+*/
+void read(int virt_mem[VIRT_PAGES][MAX_ADDR], bool page_table[VIRT_PAGES], int addr) {
+    
+}
+
+/*
+*/
+void write(int virt_mem[VIRT_PAGES][MAX_ADDR], bool page_table[VIRT_PAGES], int addr, int num) {
+
+}
+
+/*
+*/
+void showmain() {
+
+}
+
+/*
+*/
+void showdisk() {
+
+}
+
+/*
+*/
+void showptable() {
+
 }
 
 /*
@@ -56,39 +97,56 @@ Parameters:
                 or only exists in virtual memory (false/0)
 
                 eg. page hit == 1, page fault = 0
+
+    VP0: Addresses 0 - 7
+    VP1: Addresses 8 - 15
+    VP2: Addresses 16 - 23
+    VP3: Addresses 24 - 31
+    VP4: Addresses 32 - 39
+    VP5: Addresses 40 - 47
+    VP6: Addresses 48 - 55
+    VP7: Addresses 56 - 63
 */
 int main(int argc, char *argv[]) {
     char raw_input[MAX_INPUT] = "\0";
-    char *input[MAX_ARG_C] = "\0";
-    bool exit = false;
+    char *input[MAX_ARG_C] = {"\0"};
+    bool quit = false;
     
     int main_mem[MAIN_PAGES][MAX_ADDR] = {{-1}};
     int virt_mem[VIRT_PAGES][MAX_ADDR] = {{-1}};
     bool page_table[MAIN_PAGES] = {0};
-    
     init_memory(main_mem, virt_mem, page_table);
 
-    while(!exit) {
-        printf("> ");
-        fgets(raw_input, MAX_ARG_C, stdin);
-        getArgs()
+    // Page Replacement Algorithm = pr_algo
+    // FIFO: pr_algo = true (default)
+    // LRU: pr_algo = false
+    if(argc > 1) {
+        if(strncmp("FIFO", argv[1], 4) == 0)
+            pr_algo = true;
+        else if(strncmp("LRU", argv[1], 3) == 0)
+            pr_algo = false;
     }
+
+    while(!quit) {
+        printf("$> ");
+        fgets(raw_input, MAX_INPUT, stdin);
+        parseInput(input, raw_input);
+
+        if(strncmp(input[0], "quit", 4) == 0) {
+            printf("Exiting VM-Simulator...\n");
+            quit = true;
+        } 
+        else if(strncmp(input[0], "read", 4) == -0) {
+        }
+        else if(strncmp(input[0], "write", 5) == 0) {
+        }
+        else if(strncmp(input[0], "showdisk", 8) == 0) {
+        }
+        else if(strncmp(input[0], "showptable", 10) == 0) {
+        }
+        else
+            printf("Command '%s' not found.\n", input[0]);
+        }
 
     return 0;
 }
-
-/*
-if(strncmp(argv[1], "read", 4) == -0) {
-
-}
-else if(strncmp(argv[1], "write", 5) == 0) {
-}
-else if(strncmp(argv[1], "showdisk", 8) == 0) {
-}
-else if(strncmp(argv[1], "showptable", 10) == 0) {
-}
-else if(strncmp(argv[1], "quit", 4) == 0) {
-}
-else
-    printf("Command %s not found.", argv[1]);
-*/
