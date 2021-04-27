@@ -20,6 +20,7 @@ int FIFO[4] = {-1, -1, -1, -1};
 
 // If the user chooses LRU
 int LRU[4] = {-1, -1, -1, -1};
+int len = 0;
 
 /*
     page_num: if valid_bit is true/1, page_num represents its page on main memory
@@ -66,7 +67,41 @@ void parseInput(char *input[], char raw_input[]) {
     }
 }
 
+/*
+*/
+void remove_page() {
+    
+    if(len > 0) {
+        if(pr_algo) {
+            int i;
+            for(i = 0; i < 5; i++) 
+                FIFO[i] = FIFO[i + 1];
+    
+            --len;
+        }
+        else {
 
+        }
+        
+    }
+    
+}
+
+void insert_page(int page) {
+    int i;
+    if(len < 4) {
+        if(pr_algo) {
+            FIFO[len++] = page;
+        }
+        else {
+            LRU[len] = page;
+            ++len;
+        }
+    }
+    
+    
+    
+}
 
 /*
 */
@@ -78,23 +113,50 @@ void read(struct Object main_mem[MAIN_PAGES][MAX_ADDR], struct Object virt_mem[V
     struct Object obj = virt_mem[page][offset];
     
     if(!page_table[page].valid_bit) {
+        printf("A Page Fault Has Occurred\n");
         if((*main_len) < 4) {
-            printf("A Page Fault Has Occurred\n");
-            printf("(%i) Reading value %i from page %i\n", addr, offset, page);
-            printf("(%i) value = %i\n", obj.vm_addr, obj.value);
-            
-            
+            //printf("(%i) Reading value %i from page %i\n", addr, offset, page);
+            //printf("(%i) value = %i\n", obj.vm_addr, obj.value);
+            printf("%i\n", obj.value);
+            int i;
+            for(i = 0; i < MAX_ADDR; i++) 
+                main_mem[*main_len][i].value = virt_mem[page][i].value;
+
+            insert_page(page);
 
             page_table[page].valid_bit = true;
+            page_table[page].page_num = (*main_len);
             (*main_len)++;
         }
         else {
+            if(pr_algo) {
+                //printf("Removed %i ", FIFO[0]);
 
+                // Get the vm page of the old values
+                int dpn = FIFO[0];
+                page_table[dpn].valid_bit = false;
+
+                // Get the new open spot in main
+                int pnn = page_table[dpn].page_num;
+                remove_page();
+                insert_page(page);
+
+                page_table[page].valid_bit = true;
+                page_table[page].page_num = pnn;
+
+                int i;
+                for(i = 0; i < MAX_ADDR; i++) 
+                    main_mem[pnn][i].value = virt_mem[page][i].value;
+            }
+            else {
+                printf("Running LRU...");
+            }
         }
     }
     else {
-        printf("(%i) Reading value %i from page %i\n", addr, offset, page);
-        printf("(%i) value = %i\n", obj.vm_addr, obj.value);
+        //printf("(%i) Reading value %i from page %i\n", addr, offset, page);
+        //printf("(%i) value = %i\n", obj.vm_addr, obj.value);
+        printf("%i\n", obj.value);
     }
         
 }
@@ -108,9 +170,50 @@ void write(struct Object main_mem[MAIN_PAGES][MAX_ADDR], struct Object virt_mem[
 
     if(!page_table[page].valid_bit) {
         printf("A Page Fault Has Occurred\n");
+        if((*main_len) < 4) {
+            
+            //printf("Writing value %i to main address %i at main page %i representing virtual page %i\n", num, offset, *main_len, page);
+
+            virt_mem[page][offset].value = num;
+
+            int i;
+            for(i = 0; i < MAX_ADDR; i++) 
+                main_mem[*main_len][i].value = virt_mem[page][i].value;
+
+            page_table[page].valid_bit = true;
+            page_table[page].page_num = (*main_len);
+            (*main_len)++;
+        }
+        else {
+            if(pr_algo) {
+                // Get the vm page of the old values
+                int dpn = FIFO[0];
+                page_table[dpn].valid_bit = false;
+
+                // Get the new open spot in main
+                int pnn = page_table[dpn].page_num;
+                remove_page();
+                insert_page(page);
+                virt_mem[page][offset].value = num;
+
+                int i;
+                for(i = 0; i < MAX_ADDR; i++) 
+                    main_mem[pnn][i].value = virt_mem[page][i].value;
+
+                page_table[page].valid_bit = true;
+                page_table[page].page_num = pnn;
+                page_table[page].dirty_bit = true;
+            }
+            else {
+                printf("Running LRU...");
+            }
+        }
     }
     else {
-        
+        int pnn = page_table[page].page_num;
+        page_table[page].dirty_bit = true;
+        main_mem[pnn][offset].value = num;
+        virt_mem[page][offset].value = num;
     }
 }
 
@@ -143,7 +246,7 @@ void showdisk(struct Object virt_mem[MAIN_PAGES][MAX_ADDR], int dpn) {
 void showptable(struct Page page_table[VIRT_PAGES]) {
     int i;
     for(i = 0; i < VIRT_PAGES; i++)
-        printf("%i:%i:%i\n", page_table[i].valid_bit, page_table[i].page_num, page_table[i].dirty_bit);
+        printf("%i:%i:%i:%i\n", i, page_table[i].valid_bit, page_table[i].page_num, page_table[i].dirty_bit);
 }
 
 /*
@@ -180,13 +283,14 @@ void init_memory(struct Object main_mem[MAIN_PAGES][MAX_ADDR], struct Object vir
     for(i = 0; i < MAIN_PAGES; i++) {
         for(j = 0; j < MAX_ADDR; j++) {
             main_mem[i][j].value = -1;
-            main_mem[i][j].vm_addr = -1;
+            main_mem[i][j].vm_addr = z++;
         }
     }
 
+    z = 0;
     for(i = 0; i < VIRT_PAGES; i++) {
         for(j = 0; j < MAX_ADDR; j++) {
-            virt_mem[i][j].value = -1;
+            virt_mem[i][j].value = z;
             virt_mem[i][j].vm_addr = z++;
         }
     }
@@ -239,8 +343,6 @@ int main(int argc, char *argv[]) {
                 }
                 else
                     printf("Address out of bounds, must be between 0 and 63\n");
-                
-                printf("%i", main_len);
             }
             else 
                 printf("Must provide an address to read\n");
@@ -248,11 +350,12 @@ int main(int argc, char *argv[]) {
         else if(strncmp(input[0], "write", 5) == 0) {
             if(input[1] && input[2]) {
                 int addr = atoi(input[1]);
+                int num = atoi(input[2]);
 
                 if(addr >= 0 && addr < 64) {
                     
                     int value = atoi(input[2]);
-                    //read(virt_mem, page_table, addr);
+                    write(main_mem, virt_mem, page_table, &main_len, addr, num);
                 }
                 else
                     printf("Address out of bounds, must be between 0 and 63\n");
@@ -289,6 +392,7 @@ int main(int argc, char *argv[]) {
         }
         else
             printf("Command '%s' not found.\n", input[0]);
+            
         }
 
 }
