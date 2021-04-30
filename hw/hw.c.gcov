@@ -1,0 +1,516 @@
+        -:    0:Source:hw.c
+        -:    0:Graph:hw.gcno
+        -:    0:Data:hw.gcda
+        -:    0:Runs:1
+        -:    0:Programs:1
+        -:    1:#include <stdio.h>
+        -:    2:#include <stdlib.h>
+        -:    3:#include <string.h>
+        -:    4:#include <stdbool.h>
+        -:    5:
+        -:    6:#define MAX_INPUT 100
+        -:    7:#define MAX_ARG_C 10
+        -:    8:
+        -:    9:#define MAX_ADDR 8
+        -:   10:#define MAIN_PAGES 4
+        -:   11:#define VIRT_PAGES 8
+        -:   12:
+        -:   13:// Page Replacement Algorithm = pr_algo
+        -:   14:// FIFO: pr_algo = true (default)
+        -:   15:// LRU: pr_algo = false
+        -:   16:bool pr_algo = true;
+        -:   17:
+        -:   18:// If the user chooses FIFO, store the first page writen to main memory here
+        -:   19:int FIFO[4] = {-1, -1, -1, -1};
+        -:   20:
+        -:   21:// If the user chooses LRU
+        -:   22:int LRU[4] = {-1, -1, -1, -1};
+        -:   23:int len = 0;
+        -:   24:
+        -:   25:/*
+        -:   26:    page_num: if valid_bit is true/1, page_num represents its page on main memory
+        -:   27:              if valid_bit is false/0, page_num represents the page on disk memory
+        -:   28:
+        -:   29:    valid_bit: true/1 if page is also stored in main memory
+        -:   30:               false/0 if page is only stored in virtual memory
+        -:   31:
+        -:   32:    dirty_bit: if dirty_bit is true/1, page has been modified while in main memory
+        -:   33:               if dirty_bit is false/0, page has not been modified while in main memory
+        -:   34:               dirty_bit has no meaning if page is not in main memory (eg. valid_bit = false/0)
+        -:   35:*/
+        -:   36:
+        -:   37:struct Page
+        -:   38:{
+        -:   39:    int page_num;
+        -:   40:    bool valid_bit;
+        -:   41:    bool dirty_bit;
+        -:   42:};
+        -:   43:
+        -:   44:/*
+        -:   45:    vm_addr: object's address in virtual memory
+        -:   46:    value: value stored in object
+        -:   47:*/
+        -:   48:struct Object
+        -:   49:{
+        -:   50:    int vm_addr;
+        -:   51:    int value;
+        -:   52:};
+        -:   53:
+        -:   54:/*
+        -:   55:    Tokenize raw_input[] and store in *input[]
+        -:   56:        input[0] stores the command itself
+        -:   57:        input[1...] will store the various arguments, if any
+        -:   58:*/
+        1:   59:void parseInput(char *input[], char raw_input[])
+        -:   60:{
+        1:   61:    char *stripNewline = strchr(raw_input, '\n');
+        1:   62:    if (stripNewline)
+    #####:   63:        *stripNewline = 0;
+        -:   64:
+        1:   65:    char *token = strtok(raw_input, " ");
+        1:   66:    char **inputPtr = input;
+        -:   67:
+        3:   68:    while (token != NULL)
+        -:   69:    {
+        1:   70:        *inputPtr++ = token;
+        1:   71:        token = strtok(NULL, " ");
+        -:   72:    }
+        1:   73:}
+        -:   74:
+        -:   75:/*
+        -:   76:        
+        -:   77:*/
+        -:   78:
+    #####:   79:void remove_page_LRU(struct Object main_mem[MAIN_PAGES][MAX_ADDR], struct Object virt_mem[VIRT_PAGES][MAX_ADDR],
+        -:   80:          struct Page page_table[VIRT_PAGES], int page)
+        -:   81:{
+    #####:   82:    if (len > 0)
+        -:   83:    {
+        -:   84:        int i;
+    #####:   85:        for (i = 0; i < 4; i++)
+    #####:   86:            if (LRU[i] == page)
+    #####:   87:                break;
+        -:   88:
+    #####:   89:        int dpn = LRU[i];
+    #####:   90:        int pos = i;
+    #####:   91:        int ppn = page_table[dpn].page_num;
+    #####:   92:        page_table[dpn].dirty_bit = false;
+        -:   93:
+    #####:   94:        for(i = 0; i < 8; i++) 
+    #####:   95:            virt_mem[dpn][i].value = main_mem[ppn][i].value;
+        -:   96:           
+        -:   97:        int j;
+    #####:   98:        for (j = pos; j < 4; j++)
+    #####:   99:            LRU[j] = LRU[j + 1]; 
+        -:  100:
+    #####:  101:        --len;    
+        -:  102:    }
+    #####:  103:}
+        -:  104:
+    #####:  105:void remove_page(struct Object main_mem[MAIN_PAGES][MAX_ADDR], struct Object virt_mem[VIRT_PAGES][MAX_ADDR],
+        -:  106:          struct Page page_table[VIRT_PAGES])
+        -:  107:{
+    #####:  108:    if (len > 0)
+        -:  109:    {
+    #####:  110:        int pnn = page_table[FIFO[0]].page_num;
+    #####:  111:        page_table[FIFO[0]].dirty_bit = false;
+        -:  112:        int i;
+    #####:  113:        for(i = 0; i < 8; i++)
+    #####:  114:            virt_mem[FIFO[0]][i].value = main_mem[pnn][i].value;
+        -:  115:        
+        -:  116:
+    #####:  117:        for (i = 0; i < 4; i++)
+    #####:  118:            FIFO[i] = FIFO[i + 1];
+        -:  119:
+    #####:  120:        --len;
+        -:  121:    }
+    #####:  122:}
+        -:  123:
+    #####:  124:void insert_page(int page)
+        -:  125:{
+    #####:  126:    if (len < 4) {
+    #####:  127:        if(pr_algo)
+    #####:  128:            FIFO[len++] = page;
+        -:  129:        else {
+    #####:  130:            LRU[len++] = page;
+        -:  131:        }
+        -:  132:    }
+    #####:  133:}
+        -:  134:
+    #####:  135:void read(struct Object main_mem[MAIN_PAGES][MAX_ADDR], struct Object virt_mem[VIRT_PAGES][MAX_ADDR],
+        -:  136:          struct Page page_table[VIRT_PAGES], int *main_len, int addr)
+        -:  137:{
+    #####:  138:    int offset = addr % 8;
+    #####:  139:    int page = addr / 8;
+        -:  140:
+    #####:  141:    struct Object obj = virt_mem[page][offset];
+        -:  142:
+    #####:  143:    if (!page_table[page].valid_bit)
+        -:  144:    {
+    #####:  145:        printf("A Page Fault Has Occurred\n");
+    #####:  146:        if ((*main_len) < 4)
+        -:  147:        {
+    #####:  148:            printf("%i\n", obj.value);
+        -:  149:            int i;
+    #####:  150:            for (i = 0; i < MAX_ADDR; i++)
+    #####:  151:                main_mem[*main_len][i].value = virt_mem[page][i].value;
+        -:  152:
+        -:  153:            
+    #####:  154:            insert_page(page);
+        -:  155:            
+    #####:  156:            page_table[page].valid_bit = true;
+    #####:  157:            page_table[page].page_num = (*main_len);
+    #####:  158:            (*main_len)++;
+        -:  159:        }
+        -:  160:        else
+        -:  161:        {
+    #####:  162:            if (pr_algo)
+        -:  163:            {
+        -:  164:                // Get the vm page of the old values
+    #####:  165:                int dpn = FIFO[0];
+    #####:  166:                page_table[dpn].valid_bit = false;
+        -:  167:                //page_table[dpn].page_num = dpn;
+        -:  168:
+        -:  169:                // Get the new open spot in main
+    #####:  170:                int pnn = page_table[dpn].page_num;
+    #####:  171:                remove_page(main_mem, virt_mem, page_table);
+    #####:  172:                insert_page(page);
+        -:  173:
+        -:  174:                int i;
+    #####:  175:                for (i = 0; i < MAX_ADDR; i++)
+    #####:  176:                    main_mem[pnn][i].value = virt_mem[page][i].value;
+        -:  177:
+    #####:  178:                page_table[page].valid_bit = true;
+    #####:  179:                page_table[page].page_num = pnn;
+        -:  180:            }
+        -:  181:            else
+        -:  182:            {
+        -:  183:                // Get the vm page of the old values
+    #####:  184:                int dpn = LRU[0];
+    #####:  185:                page_table[dpn].valid_bit = false;
+        -:  186:                //page_table[dpn].page_num = dpn;
+        -:  187:
+        -:  188:                // Get the new open spot in main
+    #####:  189:                int pnn = page_table[dpn].page_num;
+    #####:  190:                remove_page_LRU(main_mem, virt_mem, page_table, LRU[0]);
+    #####:  191:                insert_page(page);
+        -:  192:
+        -:  193:                int i;
+    #####:  194:                for (i = 0; i < MAX_ADDR; i++)
+    #####:  195:                    main_mem[pnn][i].value = virt_mem[page][i].value;
+        -:  196:
+    #####:  197:                page_table[page].valid_bit = true;
+    #####:  198:                page_table[page].page_num = pnn;
+        -:  199:            }
+    #####:  200:            printf("%i\n", obj.value);
+        -:  201:        }
+        -:  202:    }
+        -:  203:    else
+        -:  204:    {
+    #####:  205:        if(!pr_algo) {
+    #####:  206:            remove_page_LRU(main_mem, virt_mem, page_table, page);
+    #####:  207:            insert_page(page);
+        -:  208:        }
+        -:  209:
+    #####:  210:        printf("%i\n", obj.value);
+        -:  211:    }
+    #####:  212:}
+        -:  213:
+    #####:  214:void write(struct Object main_mem[MAIN_PAGES][MAX_ADDR], struct Object virt_mem[VIRT_PAGES][MAX_ADDR],
+        -:  215:           struct Page page_table[VIRT_PAGES], int *main_len, int addr, int num)
+        -:  216:{
+    #####:  217:    int offset = addr % 8;
+    #####:  218:    int page = addr / 8;
+        -:  219:
+    #####:  220:    if (!page_table[page].valid_bit)
+        -:  221:    {
+    #####:  222:        printf("A Page Fault Has Occurred\n");
+    #####:  223:        if ((*main_len) < 4)
+        -:  224:        {
+        -:  225:
+        -:  226:            //printf("Writing value %i to main address %i at main page %i representing virtual page %i\n", num, offset, *main_len, page);
+        -:  227:                    
+    #####:  228:            insert_page(page);
+        -:  229:            int i;
+    #####:  230:            for (i = 0; i < MAX_ADDR; i++)
+    #####:  231:                main_mem[*main_len][i].value = virt_mem[page][i].value;
+        -:  232:            
+    #####:  233:            main_mem[*main_len][offset].value = num;
+        -:  234:
+    #####:  235:            page_table[page].valid_bit = true;
+    #####:  236:            page_table[page].dirty_bit = true;
+    #####:  237:            page_table[page].page_num = (*main_len);
+    #####:  238:            (*main_len)++;
+        -:  239:        }
+        -:  240:        else
+        -:  241:        {
+    #####:  242:            if (pr_algo)
+        -:  243:            {
+        -:  244:                // Get the vm page of the old values
+    #####:  245:                int dpn = FIFO[0];
+        -:  246:
+        -:  247:                // Removing 'first in' from main memory
+        -:  248:                // Set page_num back to its virtual page num
+    #####:  249:                page_table[dpn].valid_bit = false;
+    #####:  250:                page_table[dpn].dirty_bit = false;
+        -:  251:                // page_table[dpn].page_num = dpn;
+        -:  252:
+        -:  253:                // Get the new open spot in main
+    #####:  254:                int pnn = page_table[dpn].page_num;
+    #####:  255:                remove_page(main_mem, virt_mem, page_table);
+    #####:  256:                insert_page(page);
+        -:  257:
+        -:  258:                // Copy the page of the specified address from virtual memory
+        -:  259:                int i;
+    #####:  260:                for (i = 0; i < MAX_ADDR; i++)
+    #####:  261:                    main_mem[pnn][i].value = virt_mem[page][i].value;
+        -:  262:
+    #####:  263:                main_mem[pnn][offset].value = num;
+        -:  264:
+    #####:  265:                page_table[page].valid_bit = true;
+    #####:  266:                page_table[page].page_num = pnn;
+    #####:  267:                page_table[page].dirty_bit = true;
+        -:  268:            }
+        -:  269:            else
+        -:  270:            {
+        -:  271:                // Get the vm page of the old values
+    #####:  272:                int dpn = LRU[0];
+    #####:  273:                page_table[dpn].valid_bit = false;
+    #####:  274:                page_table[dpn].dirty_bit = false;
+        -:  275:                //page_table[dpn].page_num = dpn;
+        -:  276:
+        -:  277:                // Get the new open spot in main
+    #####:  278:                int pnn = page_table[dpn].page_num;
+    #####:  279:                remove_page_LRU(main_mem, virt_mem, page_table, LRU[0]);
+    #####:  280:                insert_page(page);
+        -:  281:
+        -:  282:                int i;
+    #####:  283:                for (i = 0; i < MAX_ADDR; i++)
+    #####:  284:                    main_mem[pnn][i].value = virt_mem[page][i].value;
+        -:  285:
+    #####:  286:                main_mem[pnn][offset].value = num;
+        -:  287:
+    #####:  288:                page_table[page].valid_bit = true;
+    #####:  289:                page_table[page].page_num = pnn;
+    #####:  290:                page_table[page].dirty_bit = true;
+        -:  291:            }
+        -:  292:        }
+        -:  293:    }
+        -:  294:    else
+        -:  295:    {
+    #####:  296:        int pnn = page_table[page].page_num;
+        -:  297:
+    #####:  298:        if(!pr_algo) {
+    #####:  299:            remove_page_LRU(main_mem, virt_mem, page_table, page);
+    #####:  300:            insert_page(page);
+        -:  301:        }
+        -:  302:        
+    #####:  303:        page_table[page].dirty_bit = true;
+    #####:  304:        page_table[page].valid_bit = true;
+    #####:  305:        main_mem[pnn][offset].value = num;
+        -:  306:    }
+    #####:  307:}
+        -:  308:
+        -:  309:/*
+        -:  310:    Provided a physical page number, output object in the format "vm_addr:value"
+        -:  311:        main_mem: the contents of the main memory
+        -:  312:        ppn: physical page number
+        -:  313:*/
+    #####:  314:void showmain(struct Object main_mem[MAIN_PAGES][MAX_ADDR], int ppn)
+        -:  315:{
+        -:  316:    int i;
+    #####:  317:    for (i = 0; i < MAX_ADDR; i++)
+    #####:  318:        printf("%i:%i\n", main_mem[ppn][i].vm_addr, main_mem[ppn][i].value);
+    #####:  319:}
+        -:  320:
+        -:  321:/*
+        -:  322:    Provided a disk page number, output object in the format "vm_addr:value"
+        -:  323:        virt_mem: the contents of the virtual memory
+        -:  324:        dpn: disk page number
+        -:  325:*/
+    #####:  326:void showdisk(struct Object virt_mem[MAIN_PAGES][MAX_ADDR], int dpn)
+        -:  327:{
+        -:  328:    int i;
+    #####:  329:    for (i = 0; i < MAX_ADDR; i++)
+    #####:  330:        printf("%i:%i\n", virt_mem[dpn][i].vm_addr, virt_mem[dpn][i].value);
+    #####:  331:}
+        -:  332:
+        -:  333:/*
+        -:  334:    Output page table in the format "ppn:valid_bit:page_num:dirty_bit"
+        -:  335:        page_table: the contents of the page table
+        -:  336:*/
+    #####:  337:void showptable(struct Page page_table[VIRT_PAGES])
+        -:  338:{
+        -:  339:    int i;
+    #####:  340:    for (i = 0; i < VIRT_PAGES; i++) {
+    #####:  341:        if(page_table[i].valid_bit) 
+    #####:  342:            printf("%i:%i:%i:%i\n", i, page_table[i].valid_bit, page_table[i].page_num, page_table[i].dirty_bit);
+        -:  343:        else
+    #####:  344:            printf("%i:%i:%i:%i\n", i, page_table[i].valid_bit, i, page_table[i].dirty_bit);
+        -:  345:    }
+        -:  346:        
+    #####:  347:}
+        -:  348:
+        -:  349:/*
+        -:  350:Parameters:
+        -:  351:    main_mem and virt_mem:  2D 'struct Object' array, first dimension represents the page,
+        -:  352:                            each page contains 8 addresses (stored as objects)
+        -:  353:    
+        -:  354:    page_table: 1D 'struct Page' array, each index represents the page it belongs to in virtual memory
+        -:  355:
+        -:  356:    VP0: Addresses 0 - 7
+        -:  357:    VP1: Addresses 8 - 15
+        -:  358:    VP2: Addresses 16 - 23
+        -:  359:    VP3: Addresses 24 - 31
+        -:  360:    VP4: Addresses 32 - 39
+        -:  361:    VP5: Addresses 40 - 47
+        -:  362:    VP6: Addresses 48 - 55
+        -:  363:    VP7: Addresses 56 - 63
+        -:  364:*/
+        1:  365:void init_memory(struct Object main_mem[MAIN_PAGES][MAX_ADDR], struct Object virt_mem[VIRT_PAGES][MAX_ADDR], struct Page page_table[VIRT_PAGES])
+        -:  366:{
+        1:  367:    int i, j, z = 0;
+        -:  368:
+        5:  369:    for (i = 0; i < MAIN_PAGES; i++)
+        -:  370:    {
+       36:  371:        for (j = 0; j < MAX_ADDR; j++)
+        -:  372:        {
+       32:  373:            main_mem[i][j].value = -1;
+       32:  374:            main_mem[i][j].vm_addr = z++;
+        -:  375:        }
+        -:  376:    }
+        -:  377:
+        1:  378:    z = 0;
+        9:  379:    for (i = 0; i < VIRT_PAGES; i++)
+        -:  380:    {
+       72:  381:        for (j = 0; j < MAX_ADDR; j++)
+        -:  382:        {
+       64:  383:            virt_mem[i][j].value = -1;
+       64:  384:            virt_mem[i][j].vm_addr = z++;
+        -:  385:        }
+        -:  386:    }
+        -:  387:
+        9:  388:    for (i = 0; i < VIRT_PAGES; i++)
+        -:  389:    {
+        8:  390:        page_table[i].page_num = i;
+        8:  391:        page_table[i].valid_bit = false;
+        8:  392:        page_table[i].dirty_bit = false;
+        -:  393:    }
+        1:  394:}
+        -:  395:
+        1:  396:int main(int argc, char *argv[])
+        -:  397:{
+        1:  398:    bool quit = false;
+        -:  399:
+        -:  400:    struct Object main_mem[MAIN_PAGES][MAX_ADDR];
+        -:  401:    struct Object virt_mem[VIRT_PAGES][MAX_ADDR];
+        1:  402:    int main_len = 0;
+        -:  403:
+        -:  404:    struct Page page_table[VIRT_PAGES];
+        -:  405:
+        1:  406:    init_memory(main_mem, virt_mem, page_table);
+        -:  407:
+        1:  408:    if (argc > 1)
+        -:  409:    {
+        1:  410:        if (strncmp("FIFO", argv[1], 4) == 0) 
+    #####:  411:            pr_algo = true;
+        -:  412:            
+        1:  413:        else if (strncmp("LRU", argv[1], 3) == 0) 
+        1:  414:            pr_algo = false;
+        -:  415:        
+        -:  416:        
+        -:  417:    }
+        -:  418:
+        1:  419:    if(!pr_algo)
+        1:  420:        printf("Running LRU...\n");
+        -:  421:
+        3:  422:    while (!quit)
+        -:  423:    {
+        -:  424:        int i;
+        1:  425:        for(i = 0; i < len; i++)
+    #####:  426:            printf("%i ", LRU[i]);
+        1:  427:        printf("\n");
+        -:  428:
+        1:  429:        char raw_input[MAX_INPUT] = "\0";
+        1:  430:        char *input[MAX_ARG_C] = {"\0"};
+        -:  431:
+        1:  432:        printf("$> ");
+        1:  433:        fgets(raw_input, MAX_INPUT, stdin);
+        1:  434:        parseInput(input, raw_input);
+        -:  435:
+        1:  436:        if (strncmp(input[0], "quit", 4) == 0)
+        -:  437:        {
+        1:  438:            printf("Exiting VM-Simulator...\n");
+        1:  439:            quit = true;
+        -:  440:        }
+    #####:  441:        else if (strncmp(input[0], "read", 4) == -0)
+        -:  442:        {
+    #####:  443:            if (input[1])
+        -:  444:            {
+    #####:  445:                int addr = atoi(input[1]);
+        -:  446:
+    #####:  447:                if (addr >= 0 && addr < 64)
+        -:  448:                {
+    #####:  449:                    read(main_mem, virt_mem, page_table, &main_len, addr);
+        -:  450:                }
+        -:  451:                else
+    #####:  452:                    printf("Address out of bounds, must be between 0 and 63\n");
+        -:  453:            }
+        -:  454:            else
+    #####:  455:                printf("Must provide an address to read\n");
+        -:  456:        }
+    #####:  457:        else if (strncmp(input[0], "write", 5) == 0)
+        -:  458:        {
+    #####:  459:            if (input[1] && input[2])
+    #####:  460:            {
+    #####:  461:                int addr = atoi(input[1]);
+    #####:  462:                int num = atoi(input[2]);
+        -:  463:
+    #####:  464:                if (addr >= 0 && addr < 64)
+    #####:  465:                {
+        -:  466:
+    #####:  467:                    int value = atoi(input[2]);
+    #####:  468:                    write(main_mem, virt_mem, page_table, &main_len, addr, num);
+        -:  469:                }
+        -:  470:                else
+    #####:  471:                    printf("Address out of bounds, must be between 0 and 63\n");
+        -:  472:            }
+        -:  473:            else
+    #####:  474:                printf("Must provide an address and value to write\n");
+        -:  475:        }
+    #####:  476:        else if (strncmp(input[0], "showmain", 8) == 0)
+        -:  477:        {
+    #####:  478:            if (input[1])
+        -:  479:            {
+    #####:  480:                int ppn = atoi(input[1]);
+        -:  481:
+    #####:  482:                if (ppn >= 0 && ppn < 4)
+    #####:  483:                    showmain(main_mem, ppn);
+        -:  484:                else
+    #####:  485:                    printf("Must provide a physical page number between 0 and 3\n");
+        -:  486:            }
+        -:  487:            else
+    #####:  488:                printf("Must provide a physical page number to show\n");
+        -:  489:        }
+    #####:  490:        else if (strncmp(input[0], "showdisk", 8) == 0)
+        -:  491:        {
+    #####:  492:            if (input[1])
+        -:  493:            {
+    #####:  494:                int dpn = atoi(input[1]);
+        -:  495:
+    #####:  496:                if (dpn >= 0 && dpn < 8)
+    #####:  497:                    showdisk(virt_mem, dpn);
+        -:  498:                else
+    #####:  499:                    printf("Must provide a disk page number between 0 and 7\n");
+        -:  500:            }
+        -:  501:            else
+    #####:  502:                printf("Must provide a disk page number to show\n");
+        -:  503:        }
+    #####:  504:        else if (strncmp(input[0], "showptable", 10) == 0)
+        -:  505:        {
+    #####:  506:            showptable(page_table);
+        -:  507:        }
+        -:  508:        else
+    #####:  509:            printf("Command '%s' not found.\n", input[0]);
+        -:  510:    }
+        1:  511:}
